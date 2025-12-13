@@ -1,0 +1,11 @@
+USER → CLIPBOARD → WATCHER → ORCHESTRATOR → LLM → DATABASE → FRONTEND
+
+PROBLEM: Docker backend = no system access = no data saved
+
+SOLUTION: Local backend = system access = data saved
+
+STEPS:
+1. docker compose stop backend
+2. Run backend locally  
+3. Copy text → should save to database
+4. Frontend should show the data

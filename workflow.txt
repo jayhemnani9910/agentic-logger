@@ -1,0 +1,10 @@
+USER → CLIPBOARD → WATCHER → ORCHESTRATOR → LLM → DATABASE → FRONTEND
+
+PROBLEM: Docker backend = no system access = no data
+
+SOLUTION: Local backend = system access = data flows
+
+TO DO:
+1. docker compose stop backend
+2. Run backend locally
+3. Test copy → should save and appear
