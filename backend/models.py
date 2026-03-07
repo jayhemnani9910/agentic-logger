@@ -3,16 +3,6 @@ Event models and database schemas
 """
 from app import db
 from datetime import datetime
-from enum import Enum
-
-class EventType(Enum):
-    AGENT_START = "agent_start"
-    AGENT_END = "agent_end"
-    TASK_START = "task_start"
-    TASK_END = "task_end"
-    DECISION = "decision"
-    ERROR = "error"
-    INFO = "info"
 
 class Event(db.Model):
     __tablename__ = 'events'
@@ -33,7 +23,7 @@ class Event(db.Model):
             'event_type': self.event_type,
             'agent_id': self.agent_id,
             'task_id': self.task_id,
-            'timestamp': self.timestamp.isoformat(),
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
             'message': self.message,
             'data': self.data,
             'status': self.status

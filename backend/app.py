@@ -7,33 +7,18 @@ from datetime import datetime
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from redis import Redis
 
 # Initialize extensions
 db = SQLAlchemy()
-
-def get_redis_client():
-    """Get Redis client from URL"""
-    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
-    try:
-        return Redis.from_url(redis_url, decode_responses=True)
-    except:
-        host = redis_url.split('://')[-1].split(':')[0] or 'localhost'
-        port = int(redis_url.split(':')[-1]) if ':' in redis_url else 6379
-        return Redis(host=host, port=port, decode_responses=True)
-
-redis_client = get_redis_client()
 
 def create_app(config_name='production'):
     """Application factory"""
     app = Flask(__name__)
     
-    # Configuration
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-        'POSTGRES_URL',
-        'postgresql://postgres:postgres@localhost:5432/agentic_logger'
-    )
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # Configuration - use Config class
+    from config import config as config_map
+    cfg = config_map.get(config_name, config_map['default'])
+    app.config.from_object(cfg)
     app.config['JSON_SORT_KEYS'] = False
     
     # Initialize extensions

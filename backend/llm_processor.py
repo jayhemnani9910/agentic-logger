@@ -4,9 +4,7 @@ Background Processing Queue for LLM-based content analysis using Ollama
 import json
 import logging
 import time
-from datetime import datetime
 from typing import Dict, Any, Optional
-import subprocess
 import requests
 
 try:
@@ -259,9 +257,9 @@ class ProcessingQueue:
             if event.event_metadata:
                 try:
                     metadata = json.loads(event.event_metadata) if isinstance(event.event_metadata, str) else event.event_metadata
-                except:
+                except (json.JSONDecodeError, TypeError):
                     pass
-            
+
             content_analysis = metadata.get('content', {})
             content_type = 'text'
             if content_analysis.get('is_url'):
@@ -326,7 +324,7 @@ class ProcessingQueue:
             if event.event_metadata:
                 try:
                     metadata = json.loads(event.event_metadata) if isinstance(event.event_metadata, str) else event.event_metadata
-                except:
+                except (json.JSONDecodeError, TypeError):
                     pass
             
             if tags:

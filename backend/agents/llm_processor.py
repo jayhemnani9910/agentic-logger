@@ -165,11 +165,6 @@ Respond ONLY with a JSON array of tags:
         
         return result
     
-    def generate_embedding(self, text: str) -> Optional[list[float]]:
-        """Generate embedding for text (requires embedding model)"""
-        # This would use a smaller embedding model
-        # For now, return None - would need separate embedding service
-        return None
 
 
 class OllamaManager:

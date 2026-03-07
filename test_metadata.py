@@ -3,11 +3,7 @@
 Test script to verify metadata saving works
 """
 
-import os
-import sys
-import json
 import psycopg2
-from datetime import datetime
 
 # Connect to database
 conn = psycopg2.connect(

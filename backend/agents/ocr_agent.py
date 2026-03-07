@@ -6,7 +6,6 @@ import subprocess
 import tempfile
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pathlib import Path
 
 # Add privacy filtering
 BLACKLISTED_KEYWORDS = [

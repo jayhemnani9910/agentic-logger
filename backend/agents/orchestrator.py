@@ -3,7 +3,6 @@ Orchestrator Agent - Route events between processors
 """
 from datetime import datetime
 from typing import Optional, Dict, Any
-import json
 
 from agents.clipboard_watcher import ClipboardWatcher, ClipboardEventExtractor
 from agents.ocr_agent import OCRAgent

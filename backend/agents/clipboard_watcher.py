@@ -4,7 +4,6 @@ Monitors clipboard for copy/paste events with event-driven architecture
 """
 import threading
 import time
-import os
 from datetime import datetime
 import subprocess
 import hashlib
@@ -36,8 +35,7 @@ class ClipboardWatcher:
         # Initialize X11 clipboard monitoring
         try:
             from pyperclip import paste
-            import subprocess
-            
+
             # Use xclip for X11 selection events (event-driven)
             self.xclip_process = subprocess.Popen(
                 ["xclip", "-selection", "clipboard", "-o"],
@@ -210,7 +208,6 @@ class ClipboardEventExtractor:
     def get_active_window() -> Optional[Dict[str, Any]]:
         """Get current active window information"""
         try:
-            # Try X11 first
             result = subprocess.run(
                 ['xdotool', 'getactivewindow', 'getwindowname'],
                 capture_output=True,
@@ -219,25 +216,15 @@ class ClipboardEventExtractor:
             )
             if result.returncode == 0:
                 window_title = result.stdout.strip()
-                
-                # Try to get app name from window
-                result_app = subprocess.run(
-                    ['xdotool', 'getactivewindow', 'getwindowname'],
-                    capture_output=True,
-                    timeout=2,
-                    text=True
-                )
-                
                 app_name = window_title.split(' - ')[-1] if ' - ' in window_title else 'Unknown'
-                
                 return {
                     'window_title': window_title,
                     'application': app_name,
                     'timestamp': datetime.utcnow()
                 }
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
-        
+
         return {
             'window_title': 'Unknown',
             'application': 'Unknown',

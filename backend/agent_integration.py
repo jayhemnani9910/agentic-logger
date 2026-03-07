@@ -10,8 +10,6 @@ This module handles:
 
 import threading
 import logging
-import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

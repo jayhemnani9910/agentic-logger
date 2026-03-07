@@ -7,7 +7,6 @@ import threading
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pathlib import Path
 
 class CommandLogger:
     """Log shell commands executed"""

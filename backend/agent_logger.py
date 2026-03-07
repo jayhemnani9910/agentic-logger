@@ -2,8 +2,6 @@
 Agent implementation for event logging
 """
 import requests
-import json
-from datetime import datetime
 
 class AgentLogger:
     def __init__(self, api_url='http://localhost:8000/api', agent_id=None):

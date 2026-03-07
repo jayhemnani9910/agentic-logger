@@ -14,12 +14,9 @@ Usage:
 
 import os
 import sys
-import threading
 import time
-import logging
 import json
 import platform
-import subprocess
 import psutil
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -131,9 +128,7 @@ class LocalAgentRunner:
         
         self.db = SQLAlchemy(self.db_app)
         
-        # Import models and create tables
         with self.db_app.app_context():
-            from models_extended import ClipboardEvent, ActivityEvent, CommandEvent, OCRResult
             self.db.create_all()
     
     def _on_clipboard_event(self, clipboard_data: Dict[str, Any]):

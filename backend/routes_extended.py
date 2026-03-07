@@ -12,19 +12,41 @@ Provides REST endpoints for:
 from flask import request, jsonify
 from datetime import datetime, timedelta
 from sqlalchemy import func, desc
-from functools import wraps
 import json
 
 try:
     from models_extended import (
         ClipboardEvent, ActivityEvent, CommandEvent, OCRResult
     )
-    from models import db, Event, AgentSession
+    from models import db
 except ImportError:
     from .models_extended import (
         ClipboardEvent, ActivityEvent, CommandEvent, OCRResult
     )
-    from .models import db, Event, AgentSession
+    from .models import db
+
+
+def _parse_metadata(raw_metadata):
+    """Parse event_metadata, handling both string and dict forms."""
+    if not raw_metadata:
+        return {}
+    if isinstance(raw_metadata, dict):
+        return raw_metadata
+    try:
+        return json.loads(raw_metadata)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _content_icon(content_analysis):
+    """Determine content icon based on content analysis flags."""
+    if content_analysis.get('is_url'):
+        return '\U0001f517'
+    if content_analysis.get('is_code'):
+        return '\U0001f4bb'
+    if content_analysis.get('is_json'):
+        return '\U0001f4cb'
+    return '\U0001f4dd'
 
 
 def register_extended_routes(app):
@@ -101,25 +123,10 @@ def register_extended_routes(app):
             # Parse metadata for response
             data = []
             for e in events:
-                metadata = {}
-                if e.event_metadata:
-                    try:
-                        metadata = json.loads(e.event_metadata) if isinstance(e.event_metadata, str) else e.event_metadata
-                    except:
-                        pass
-                
+                metadata = _parse_metadata(e.event_metadata)
                 content_analysis = metadata.get('content', {})
                 system_state = metadata.get('system', {})
-                
-                # Determine content icon
-                content_icon = '📝'
-                if content_analysis.get('is_url'):
-                    content_icon = '🔗'
-                elif content_analysis.get('is_code'):
-                    content_icon = '💻'
-                elif content_analysis.get('is_json'):
-                    content_icon = '📋'
-                
+
                 data.append({
                     'id': e.id,
                     'timestamp': e.timestamp.isoformat() if e.timestamp else None,
@@ -133,7 +140,7 @@ def register_extended_routes(app):
                     'ocr_count': len(e.ocr_results) if hasattr(e, 'ocr_results') else 0,
                     'created_at': e.created_at.isoformat() if e.created_at else None,
                     'event_metadata': {
-                        'content_icon': content_icon,
+                        'content_icon': _content_icon(content_analysis),
                         'content_length': content_analysis.get('content_length', 0),
                         'is_url': content_analysis.get('is_url', False),
                         'is_code': content_analysis.get('is_code', False),
@@ -142,7 +149,7 @@ def register_extended_routes(app):
                         'memory_percent': system_state.get('memory_percent')
                     }
                 })
-            
+
             return jsonify({
                 'success': True,
                 'data': data,
@@ -189,18 +196,10 @@ def register_extended_routes(app):
             # Parse metadata for response
             data = []
             for e in events:
-                metadata = {}
-                system_state = {}
-                system_info = {}
-                
-                if e.event_metadata:
-                    try:
-                        metadata = json.loads(e.event_metadata) if isinstance(e.event_metadata, str) else e.event_metadata
-                        system_state = metadata.get('system', {})
-                        system_info = metadata.get('system_info', {})
-                    except:
-                        pass
-                
+                metadata = _parse_metadata(e.event_metadata)
+                system_state = metadata.get('system', {})
+                system_info = metadata.get('system_info', {})
+
                 data.append({
                     'id': e.id,
                     'timestamp': e.timestamp.isoformat() if e.timestamp else None,
@@ -215,7 +214,7 @@ def register_extended_routes(app):
                     'system_info': system_info,
                     'full_metadata': metadata
                 })
-            
+
             return jsonify({
                 'success': True,
                 'data': data,
@@ -227,8 +226,8 @@ def register_extended_routes(app):
             }), 200
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
-    
-    
+
+
     @app.route('/api/commands', methods=['GET'])
     def get_command_history():
         """Get shell command execution history with filtering."""
@@ -262,18 +261,10 @@ def register_extended_routes(app):
             # Parse metadata for response
             data = []
             for e in events:
-                metadata = {}
-                system_state = {}
-                system_info = {}
-                
-                if e.event_metadata:
-                    try:
-                        metadata = json.loads(e.event_metadata) if isinstance(e.event_metadata, str) else e.event_metadata
-                        system_state = metadata.get('system', {})
-                        system_info = metadata.get('system_info', {})
-                    except:
-                        pass
-                
+                metadata = _parse_metadata(e.event_metadata)
+                system_state = metadata.get('system', {})
+                system_info = metadata.get('system_info', {})
+
                 data.append({
                     'id': e.id,
                     'timestamp': e.timestamp.isoformat() if e.timestamp else None,
@@ -462,33 +453,11 @@ def register_extended_routes(app):
                 return jsonify({'success': False, 'error': 'Event not found'}), 404
             
             # Parse metadata
-            metadata = {}
-            if event.event_metadata:
-                try:
-                    metadata = json.loads(event.event_metadata) if isinstance(event.event_metadata, str) else event.event_metadata
-                except:
-                    metadata = {}
-            
-            # Extract content analysis
+            metadata = _parse_metadata(event.event_metadata)
             content_analysis = metadata.get('content', {})
             system_state = metadata.get('system', {})
             activity_context = metadata.get('activity', {})
-            
-            # Determine content type icon
-            icon_map = {
-                'url': '🔗',
-                'code': '💻',
-                'json': '📋',
-                'text': '📝'
-            }
-            content_icon = '📝'
-            if content_analysis.get('is_url'):
-                content_icon = '🔗'
-            elif content_analysis.get('is_code'):
-                content_icon = '💻'
-            elif content_analysis.get('is_json'):
-                content_icon = '📋'
-            
+
             return jsonify({
                 'success': True,
                 'id': event.id,
@@ -508,7 +477,7 @@ def register_extended_routes(app):
                     'length': len(event.raw_content) if event.raw_content else 0
                 },
                 'content_analysis': {
-                    'icon': content_icon,
+                    'icon': _content_icon(content_analysis),
                     'length': content_analysis.get('content_length', 0),
                     'is_url': content_analysis.get('is_url', False),
                     'is_code': content_analysis.get('is_code', False),
@@ -542,17 +511,10 @@ def register_extended_routes(app):
             if not event:
                 return jsonify({'success': False, 'error': 'Event not found'}), 404
             
-            # Parse metadata
-            metadata = {}
-            if event.event_metadata:
-                try:
-                    metadata = json.loads(event.event_metadata) if isinstance(event.event_metadata, str) else event.event_metadata
-                except:
-                    metadata = {}
-            
+            metadata = _parse_metadata(event.event_metadata)
             system_state = metadata.get('system', {})
             system_info = metadata.get('system_info', {})
-            
+
             return jsonify({
                 'success': True,
                 'id': event.id,
@@ -588,18 +550,9 @@ def register_extended_routes(app):
             if not event:
                 return jsonify({'success': False, 'error': 'Event not found'}), 404
             
-            # Parse metadata
-            metadata = {}
-            if event.event_metadata:
-                try:
-                    metadata = json.loads(event.event_metadata) if isinstance(event.event_metadata, str) else event.event_metadata
-                except:
-                    metadata = {}
-            
+            metadata = _parse_metadata(event.event_metadata)
             system_state = metadata.get('system', {})
             system_info = metadata.get('system_info', {})
-            
-            # Determine success status
             success = event.exit_code == 0
             status_icon = '✅' if success else '❌'
             
@@ -661,10 +614,10 @@ def register_extended_routes(app):
         """Check health of extended features."""
         try:
             checks = {
-                'clipboard_table': bool(db.session.query(ClipboardEvent).first() is not None or True),
-                'activity_table': bool(db.session.query(ActivityEvent).first() is not None or True),
-                'command_table': bool(db.session.query(CommandEvent).first() is not None or True),
-                'ocr_table': bool(db.session.query(OCRResult).first() is not None or True),
+                'clipboard_table': db.session.query(ClipboardEvent).first() is not None,
+                'activity_table': db.session.query(ActivityEvent).first() is not None,
+                'command_table': db.session.query(CommandEvent).first() is not None,
+                'ocr_table': db.session.query(OCRResult).first() is not None,
             }
             
             return jsonify({

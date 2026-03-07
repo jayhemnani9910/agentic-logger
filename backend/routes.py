@@ -2,10 +2,9 @@
 API Routes and Endpoints
 """
 from flask import Blueprint, request, jsonify
-from app import db, redis_client
+from app import db
 from models import Event, AgentSession
 from datetime import datetime, timedelta
-import json
 from sqlalchemy import text
 
 api_bp = Blueprint('api', __name__)
@@ -16,7 +15,6 @@ def health_check():
     """Health check endpoint"""
     try:
         db.session.execute(text('SELECT 1'))
-        redis_client.ping()
         return jsonify({
             'status': 'healthy',
             'timestamp': datetime.utcnow().isoformat()
@@ -45,12 +43,7 @@ def create_event():
         
         db.session.add(event)
         db.session.commit()
-        
-        # Cache recent events
-        cache_key = f"events:{data.get('agent_id')}"
-        redis_client.lpush(cache_key, json.dumps(event.to_dict()))
-        redis_client.expire(cache_key, 3600)
-        
+
         return jsonify(event.to_dict()), 201
     except Exception as e:
         db.session.rollback()
@@ -215,12 +208,14 @@ def keyword_search():
         if not keywords:
             return jsonify({'error': 'Keywords parameter required'}), 400
         
+        def escape_like(s):
+            return s.replace('%', r'\%').replace('_', r'\_')
+
         query_filter = None
         for keyword in keywords:
-            if query_filter is None:
-                query_filter = ClipboardEvent.raw_content.ilike(f'%{keyword}%')
-            else:
-                query_filter = query_filter | ClipboardEvent.raw_content.ilike(f'%{keyword}%')
+            escaped = escape_like(keyword)
+            condition = ClipboardEvent.raw_content.ilike(f'%{escaped}%')
+            query_filter = condition if query_filter is None else (query_filter | condition)
         
         results = db.session.query(ClipboardEvent).filter(
             query_filter
