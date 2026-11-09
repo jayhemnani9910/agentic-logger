@@ -2,6 +2,9 @@
 Clipboard Watcher Agent
 Monitors clipboard for copy/paste events with event-driven architecture
 """
+import os
+import shutil
+import sys
 import threading
 import time
 from datetime import datetime
@@ -11,6 +14,9 @@ from typing import Optional, Dict, Any
 import logging
 
 logger = logging.getLogger(__name__)
+
+# A copy that offers any of these is treated as text, even if it also has an image
+TEXT_TARGETS = ('UTF8_STRING', 'STRING', 'TEXT', 'text/plain', 'text/plain;charset=utf-8')
 
 class ClipboardWatcher:
     """Watch system clipboard for changes using event-driven X11 monitoring"""
@@ -36,30 +42,61 @@ class ClipboardWatcher:
     
     def _detect_platform(self) -> str:
         """Detect clipboard manager available on system"""
-        try:
-            subprocess.run(['xclip', '-selection', 'clipboard', '-o'],
-                         capture_output=True, timeout=1)
-            return 'xclip'
-        except (FileNotFoundError, subprocess.SubprocessError, OSError):
-            pass
+        # xclip exits non-zero on an empty clipboard too, so only a display error rules it out
+        if os.environ.get('DISPLAY') and shutil.which('xclip'):
+            try:
+                result = subprocess.run(['xclip', '-selection', 'clipboard', '-o'],
+                                        capture_output=True, timeout=1, text=True, errors='ignore')
+                if 'open display' not in result.stderr:
+                    return 'xclip'
+            except (subprocess.SubprocessError, OSError):
+                pass
 
-        try:
-            subprocess.run(['wl-paste'], capture_output=True, timeout=1)
+        if os.environ.get('WAYLAND_DISPLAY') and shutil.which('wl-paste'):
             return 'wl-clipboard'
-        except (FileNotFoundError, subprocess.SubprocessError, OSError):
-            pass
 
-        try:
-            import pyperclip
-            return 'pyperclip'
-        except ImportError:
-            pass
-        
+        if sys.platform != 'linux':
+            try:
+                import pyperclip
+                return 'pyperclip'
+            except ImportError:
+                pass
+
         return 'none'
-    
+
+    def _read_clipboard_image(self) -> Optional[bytes]:
+        """Return PNG bytes when the clipboard holds an image and no text"""
+        if self.platform == 'xclip':
+            list_targets = ['xclip', '-selection', 'clipboard', '-t', 'TARGETS', '-o']
+            read_image = ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-o']
+        elif self.platform == 'wl-clipboard':
+            list_targets = ['wl-paste', '--list-types']
+            read_image = ['wl-paste', '--type', 'image/png']
+        else:
+            return None
+
+        targets = subprocess.run(list_targets, capture_output=True, timeout=2, text=True)
+        if targets.returncode != 0:
+            return None
+
+        available = targets.stdout.split()
+        if 'image/png' not in available or any(target in available for target in TEXT_TARGETS):
+            return None
+
+        image = subprocess.run(read_image, capture_output=True, timeout=5)
+        return image.stdout if image.returncode == 0 and image.stdout else None
+
     def _get_clipboard_content(self) -> Optional[Dict[str, Any]]:
         """Get current clipboard content"""
         try:
+            image = self._read_clipboard_image()
+            if image:
+                return {
+                    'type': 'image',
+                    'content': image,
+                    'timestamp': datetime.utcnow()
+                }
+
             if self.platform == 'xclip':
                 result = subprocess.run(
                     ['xclip', '-selection', 'clipboard', '-o'],
@@ -111,8 +148,12 @@ class ClipboardWatcher:
             return
         
         content = content_data['content']
-        content_hash = hashlib.md5(content.encode()).hexdigest()
-        
+        if not content:
+            return
+
+        content_bytes = content if isinstance(content, bytes) else content.encode()
+        content_hash = hashlib.md5(content_bytes).hexdigest()
+
         if content_hash != self.last_hash:
             self.last_hash = content_hash
             if self.on_change_callback:
@@ -223,11 +264,13 @@ class ClipboardEventExtractor:
 if __name__ == '__main__':
     # Test clipboard watcher
     def on_clipboard_change(data):
-        content_type = ClipboardEventExtractor.get_content_type(data['content'])
+        is_text = data['type'] == 'text'
+        content_type = ClipboardEventExtractor.get_content_type(data['content']) if is_text else 'image'
         window_info = ClipboardEventExtractor.get_active_window()
         print(f"\n📋 Clipboard Event:")
         print(f"   Type: {content_type}")
-        print(f"   Content: {data['content'][:100]}")
+        preview = data['content'][:100] if is_text else f"{len(data['content'])} bytes"
+        print(f"   Content: {preview}")
         print(f"   App: {window_info['application']}")
         print(f"   Time: {data['timestamp']}")
     

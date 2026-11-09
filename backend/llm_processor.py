@@ -3,6 +3,7 @@ Background Processing Queue for LLM-based content analysis using Ollama
 """
 import json
 import logging
+import os
 import time
 from typing import Dict, Any, Optional
 import requests
@@ -14,17 +15,39 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'qwen3.5:4b')
+
+
+def _load_metadata(raw_metadata) -> Dict[str, Any]:
+    """Return a fresh dict from event_metadata, stored as JSON or as a string"""
+    try:
+        metadata = json.loads(raw_metadata) if isinstance(raw_metadata, str) else raw_metadata
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return dict(metadata) if isinstance(metadata, dict) else {}
+
+
+def _unprocessed_clipboard_query():
+    """Clipboard events that have content but no summary yet, oldest first"""
+    return ClipboardEvent.query.filter(
+        ClipboardEvent.raw_content.isnot(None),
+        ClipboardEvent.raw_content != '',
+        (ClipboardEvent.processed_summary == None) |
+        (ClipboardEvent.processed_summary == '')
+    ).order_by(ClipboardEvent.id)
+
 
 class OllamaProcessor:
     """Process events with Ollama LLM for summarization and tagging"""
     
-    def __init__(self, ollama_url: str = 'http://localhost:11434', model: str = 'mistral'):
+    def __init__(self, ollama_url: str = OLLAMA_URL, model: str = OLLAMA_MODEL):
         """
         Initialize Ollama processor
         
         Args:
             ollama_url: URL to Ollama service
-            model: Model to use for processing (default: mistral)
+            model: Model to use for processing
         """
         self.ollama_url = ollama_url
         self.model = model
@@ -223,7 +246,7 @@ class OllamaProcessor:
 class ProcessingQueue:
     """Manage processing queue for events"""
     
-    def __init__(self, db, ollama_url: str = 'http://localhost:11434'):
+    def __init__(self, db, ollama_url: str = OLLAMA_URL):
         """Initialize processing queue"""
         self.db = db
         self.processor = OllamaProcessor(ollama_url=ollama_url)
@@ -253,12 +276,7 @@ class ProcessingQueue:
                 return True
             
             # Detect content type
-            metadata = {}
-            if event.event_metadata:
-                try:
-                    metadata = json.loads(event.event_metadata) if isinstance(event.event_metadata, str) else event.event_metadata
-                except (json.JSONDecodeError, TypeError):
-                    pass
+            metadata = _load_metadata(event.event_metadata)
 
             content_analysis = metadata.get('content', {})
             content_type = 'text'
@@ -271,6 +289,8 @@ class ProcessingQueue:
             
             # Generate summary
             summary = self.processor.generate_summary(event.raw_content, content_type)
+            if not summary:
+                return False
             
             # Extract tags
             tags = self.processor.extract_tags(event.raw_content, summary)
@@ -284,16 +304,15 @@ class ProcessingQueue:
             
             # Add sentiment to metadata
             if sentiment:
-                if not metadata:
-                    metadata = {}
                 metadata['sentiment'] = sentiment
-                event.event_metadata = json.dumps(metadata)
+                event.event_metadata = metadata
             
             self.db.session.commit()
             self.logger.info(f'Processed clipboard event {event_id}: {len(summary)} char summary, {len(tags)} tags')
             return True
             
         except Exception as e:
+            self.db.session.rollback()
             self.logger.error(f'Failed to process clipboard event {event_id}: {e}')
             return False
     
@@ -318,24 +337,19 @@ class ProcessingQueue:
             
             # Generate analysis/tags for command
             tags = self.processor.extract_tags(event.command, max_tags=3)
+            if not tags:
+                return False
             
-            # Build command info
-            metadata = {}
-            if event.event_metadata:
-                try:
-                    metadata = json.loads(event.event_metadata) if isinstance(event.event_metadata, str) else event.event_metadata
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            
-            if tags:
-                metadata['command_tags'] = tags
-                event.event_metadata = json.dumps(metadata)
+            metadata = _load_metadata(event.event_metadata)
+            metadata['command_tags'] = tags
+            event.event_metadata = json.dumps(metadata)
             
             self.db.session.commit()
             self.logger.info(f'Processed command event {event_id}: extracted {len(tags)} tags')
             return True
             
         except Exception as e:
+            self.db.session.rollback()
             self.logger.error(f'Failed to process command event {event_id}: {e}')
             return False
     
@@ -355,10 +369,7 @@ class ProcessingQueue:
         try:
             if event_type in ('clipboard', 'all'):
                 # Find unprocessed clipboard events
-                unprocessed = ClipboardEvent.query.filter(
-                    (ClipboardEvent.processed_summary == None) |
-                    (ClipboardEvent.processed_summary == '')
-                ).limit(limit).all()
+                unprocessed = _unprocessed_clipboard_query().limit(limit).all()
                 
                 for event in unprocessed:
                     if self.process_clipboard_event(event.id):
@@ -368,7 +379,10 @@ class ProcessingQueue:
             
             if event_type in ('command', 'all'):
                 # Find command events without tags
-                unprocessed = CommandEvent.query.limit(limit).all()
+                unprocessed = CommandEvent.query.filter(
+                    (CommandEvent.event_metadata == None) |
+                    CommandEvent.event_metadata.notlike('%"command_tags"%')
+                ).order_by(CommandEvent.id).limit(limit).all()
                 
                 for event in unprocessed:
                     if self.process_command_event(event.id):
@@ -382,7 +396,7 @@ class ProcessingQueue:
         return stats
 
 
-def start_background_processor(app, db, ollama_url: str = 'http://localhost:11434', interval: int = 30):
+def start_background_processor(app, db, ollama_url: str = OLLAMA_URL, interval: int = 30):
     """
     Start background processor in a separate thread
     
@@ -440,10 +454,7 @@ def register_processing_routes(app, db):
             models = queue.processor.get_available_models() if ollama_available else []
             
             # Count unprocessed events
-            unprocessed_clipboard = ClipboardEvent.query.filter(
-                (ClipboardEvent.processed_summary == None) |
-                (ClipboardEvent.processed_summary == '')
-            ).count()
+            unprocessed_clipboard = _unprocessed_clipboard_query().count()
             
             return jsonify({
                 'success': True,

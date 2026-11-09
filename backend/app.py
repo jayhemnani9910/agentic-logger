@@ -6,10 +6,8 @@ import logging
 from datetime import datetime
 from flask import Flask, jsonify
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
 
-# Initialize extensions
-db = SQLAlchemy()
+from extensions import db
 
 def create_app(config_name='production'):
     """Application factory"""
@@ -23,7 +21,7 @@ def create_app(config_name='production'):
     
     # Initialize extensions
     db.init_app(app)
-    CORS(app)
+    CORS(app, origins=os.getenv('CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000').split(','))
     
     # Setup logging
     setup_logging(app)
@@ -60,8 +58,10 @@ def create_app(config_name='production'):
     
     # Create tables
     with app.app_context():
+        from models_extended import upgrade_schema
         db.create_all()
-    
+        upgrade_schema()
+
     # Initialize agent integration (optional - agents may not all be available)
     try:
         from agent_integration import init_agent_integration
@@ -93,4 +93,4 @@ def setup_logging(app):
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=8000, debug=False)
+    app.run(host='127.0.0.1', port=8000, debug=False)

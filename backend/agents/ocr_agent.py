@@ -1,25 +1,33 @@
 """
 OCR Agent - Extract text from images
 """
+import hashlib
 import os
+import re
+import shutil
 import subprocess
 import tempfile
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-# Add privacy filtering
-BLACKLISTED_KEYWORDS = [
-    "password", "passwd", "pwd", "secret", "key", "token",
-    "credit card", "ssn", "social security", "api_key",
-    "private_key", "access_token", "bearer"
+SENSITIVE_PLACEHOLDER = "[SENSITIVE_CONTENT_FILTERED]"
+
+IMAGE_DIR = os.path.expanduser(os.getenv('IMAGE_DIR', '~/.local/share/agentic_logger/images'))
+
+SENSITIVE_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE) for pattern in (
+        r"\b(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|access[_-]?token)\b\s*[:=]\s*\S+",
+        r"\bbearer\s+[a-z0-9._~+/-]{10,}",
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+        r"\b(credit card|ssn|social security)\b",
+        r"\b(sk-[a-z0-9_-]{20,}|gh[pousr]_[a-z0-9]{36}|AKIA[0-9A-Z]{16})\b",
+    )
 ]
 
 def filter_sensitive_content(text: str) -> str:
-    """Filter out sensitive information"""
-    import re
-    for keyword in BLACKLISTED_KEYWORDS:
-        if keyword.lower() in text.lower():
-            return "[SENSITIVE_CONTENT_FILTERED]"
+    """Replace the whole text when it looks like it holds a credential"""
+    if any(pattern.search(text) for pattern in SENSITIVE_PATTERNS):
+        return SENSITIVE_PLACEHOLDER
     return text
 
 class OCRAgent:
@@ -130,13 +138,26 @@ class OCRAgent:
         try:
             result = self.process_image(tmp_path)
             if result and result.get('success'):
-                result['temp_image_path'] = tmp_path
+                filtered_text = filter_sensitive_content(result['extracted_text'])
+                if filtered_text == result['extracted_text']:
+                    result['image_path'] = self._store_image(tmp_path, image_data)
+                else:
+                    result['extracted_text'] = filtered_text
+                    result['image_path'] = None
             return result
         finally:
             # Cleanup temp file after processing
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
     
+    @staticmethod
+    def _store_image(source_path: str, image_data: bytes) -> str:
+        """Copy an image to permanent storage and return its path"""
+        os.makedirs(IMAGE_DIR, exist_ok=True)
+        image_path = os.path.join(IMAGE_DIR, f"{hashlib.sha256(image_data).hexdigest()}.png")
+        shutil.copyfile(source_path, image_path)
+        return image_path
+
     def _get_clipboard_image(self) -> Optional[bytes]:
         """Get image data from system clipboard"""
         try:
@@ -160,58 +181,6 @@ class OCRAgent:
             )
             if result.returncode == 0 and result.stdout:
                 return result.stdout
-        except (FileNotFoundError, subprocess.SubprocessError, OSError):
-            pass
-        
-        return None
-    
-    def save_screenshot(self, output_dir: str = None) -> Optional[str]:
-        """
-        Capture and save screenshot
-        Args:
-            output_dir: Directory to save screenshot
-        Returns:
-            Path to saved screenshot
-        """
-        output_dir = output_dir or tempfile.gettempdir()
-        
-        # Generate filename with timestamp
-        filename = f"screenshot_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.png"
-        output_path = os.path.join(output_dir, filename)
-        
-        try:
-            # Try gnome-screenshot
-            result = subprocess.run(
-                ['gnome-screenshot', '-f', output_path],
-                capture_output=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                return output_path
-        except (FileNotFoundError, subprocess.SubprocessError, OSError):
-            pass
-
-        try:
-            # Try import (ImageMagick)
-            result = subprocess.run(
-                ['import', '-window', 'root', output_path],
-                capture_output=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                return output_path
-        except (FileNotFoundError, subprocess.SubprocessError, OSError):
-            pass
-
-        try:
-            # Try scrot
-            result = subprocess.run(
-                ['scrot', output_path],
-                capture_output=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                return output_path
         except (FileNotFoundError, subprocess.SubprocessError, OSError):
             pass
         

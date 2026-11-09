@@ -5,8 +5,8 @@ Activity Logging Agents Package
 from .clipboard_watcher import ClipboardWatcher, ClipboardEventExtractor
 from .ocr_agent import OCRAgent
 from .activity_watcher import ActivityWatcher
-from .command_logger import CommandLogger, SnoopyCommandLogger
-from .llm_processor import LLMProcessor, OllamaManager
+from .command_logger import CommandLogger
+from .llm_processor import LLMProcessor
 from .orchestrator import EventOrchestrator
 
 __all__ = [
@@ -15,8 +15,6 @@ __all__ = [
     'OCRAgent',
     'ActivityWatcher',
     'CommandLogger',
-    'SnoopyCommandLogger',
     'LLMProcessor',
-    'OllamaManager',
     'EventOrchestrator',
 ]

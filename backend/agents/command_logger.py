@@ -2,9 +2,7 @@
 Command Logger Agent - Track shell commands executed
 """
 import os
-import subprocess
 import threading
-import time
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -16,28 +14,22 @@ class CommandLogger:
         self.bash_history_file = os.path.expanduser('~/.bash_history')
         self.zsh_history_file = os.path.expanduser('~/.zsh_history')
         self.last_position = 0
+        self.active_history = None
         self.commands_cache = []
-    
-    def _get_active_shell_history(self) -> tuple[Optional[str], int]:
-        """Get the active shell history file and current position"""
-        # Try bash first
-        if os.path.exists(self.bash_history_file):
-            try:
-                with open(self.bash_history_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    f.seek(0, 2)  # Seek to end
-                    return self.bash_history_file, f.tell()
-            except OSError:
-                pass
+        self._stop_event = threading.Event()
 
-        # Try zsh
-        if os.path.exists(self.zsh_history_file):
+    def _get_active_shell_history(self) -> tuple[Optional[str], int]:
+        """Get the most recently written shell history file and its end position"""
+        existing = [path for path in (self.bash_history_file, self.zsh_history_file) if os.path.exists(path)]
+
+        for history_file in sorted(existing, key=os.path.getmtime, reverse=True):
             try:
-                with open(self.zsh_history_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    f.seek(0, 2)
-                    return self.zsh_history_file, f.tell()
+                with open(history_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    f.seek(0, 2)  # Seek to end
+                    return history_file, f.tell()
             except OSError:
-                pass
-        
+                continue
+
         return None, 0
     
     def _parse_bash_history(self, lines: list[str]) -> list[Dict[str, Any]]:
@@ -89,7 +81,12 @@ class CommandLogger:
         
         if not history_file:
             return []
-        
+
+        # File was trimmed, or another shell took over: carry on from its end
+        if self.last_position > current_pos or (self.active_history and history_file != self.active_history):
+            self.last_position = current_pos
+        self.active_history = history_file
+
         try:
             with open(history_file, 'r', encoding='utf-8', errors='ignore') as f:
                 # Read from last position to end
@@ -114,87 +111,26 @@ class CommandLogger:
             return []
     
     def monitor_commands(self, on_command_callback=None, check_interval: int = 5):
-        """Monitor for new commands in real-time"""
+        """Log every command written to the history after this call"""
+        self._stop_event.clear()
+        self.active_history, self.last_position = self._get_active_shell_history()
+
         def monitor_loop():
-            last_command = None
-            while True:
+            while not self._stop_event.wait(check_interval):
                 try:
-                    recent = self.get_recent_commands(limit=1)
-
-                    if recent and recent[0]['command'] != last_command:
-                        last_command = recent[0]['command']
+                    for command in reversed(self.get_recent_commands(limit=1000)):
                         if on_command_callback:
-                            on_command_callback(recent[0])
-
-                    time.sleep(check_interval)
+                            on_command_callback(command)
                 except Exception as e:
                     print(f"Error in command monitor: {e}")
-                    time.sleep(check_interval)
-        
+
         thread = threading.Thread(target=monitor_loop, daemon=True)
         thread.start()
         return thread
 
-
-class SnoopyCommandLogger:
-    """Alternative: Use Snoopy system library for command logging"""
-    
-    @staticmethod
-    def is_available() -> bool:
-        """Check if Snoopy is installed"""
-        try:
-            result = subprocess.run(
-                ['snoopy', '-h'],
-                capture_output=True,
-                timeout=2
-            )
-            return result.returncode == 0
-        except (FileNotFoundError, subprocess.SubprocessError, OSError):
-            return False
-
-    @staticmethod
-    def get_snoopy_log_path() -> Optional[str]:
-        """Get Snoopy log file path"""
-        # Common locations
-        paths = [
-            '/var/log/snoopy.log',
-            '/var/log/auth.log',
-            '/var/log/messages'
-        ]
-        
-        for path in paths:
-            if os.path.exists(path):
-                return path
-        
-        return None
-    
-    @staticmethod
-    def read_snoopy_logs(limit: int = 100) -> list[Dict[str, Any]]:
-        """Read Snoopy logs"""
-        log_path = SnoopyCommandLogger.get_snoopy_log_path()
-        
-        if not log_path:
-            return []
-        
-        commands = []
-        try:
-            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                lines = f.readlines()[-limit:]
-            
-            for line in lines:
-                if 'snoopy' in line.lower():
-                    # Parse snoopy log format
-                    # Example: ... snoopy[PID]: username:command
-                    if 'username' in line or 'command' in line:
-                        commands.append({
-                            'command': line.strip(),
-                            'source': 'snoopy',
-                            'timestamp': datetime.utcnow()
-                        })
-        except OSError:
-            pass
-
-        return commands
+    def stop(self):
+        """Stop monitoring commands"""
+        self._stop_event.set()
 
 
 if __name__ == '__main__':
@@ -205,10 +141,3 @@ if __name__ == '__main__':
     recent = logger.get_recent_commands(limit=10)
     for cmd in recent:
         print(f"  {cmd['timestamp']}: {cmd['command']}")
-    
-    # Check Snoopy
-    if SnoopyCommandLogger.is_available():
-        print("\n✅ Snoopy available")
-    else:
-        print("\n❌ Snoopy not available")
-        print("   Install with: sudo apt-get install snoopy")

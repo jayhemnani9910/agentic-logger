@@ -30,9 +30,11 @@ CREATE TABLE IF NOT EXISTS clipboard_events (
     source_app VARCHAR(255),
     source_url VARCHAR(500),
     processed_summary TEXT,
-    tags JSONB,
+    tags VARCHAR(1000),
     image_path VARCHAR(500),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    embedding JSON,
+    event_metadata JSON
 );
 
 -- Activity/Window Events Table

@@ -1,7 +1,7 @@
 """
 Event models and database schemas
 """
-from app import db
+from extensions import db
 from datetime import datetime
 
 class Event(db.Model):

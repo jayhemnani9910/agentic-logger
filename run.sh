@@ -3,7 +3,7 @@ set -e
 
 # Start services
 echo "Starting services..."
-cd /home/po/projects/personal/jodnews/agentic_logger
+cd "$(dirname "$0")"
 
 # Make setup script executable
 chmod +x setup.sh
@@ -22,8 +22,8 @@ curl -s http://localhost:8000/health | python -m json.tool || echo "API not read
 echo ""
 echo "Setup complete! Use these commands:"
 echo ""
-echo "View logs:           docker-compose logs -f"
-echo "Stop services:       docker-compose down"
-echo "Restart services:    docker-compose restart"
-echo "Remove volumes:      docker-compose down -v"
+echo "View logs:           docker compose logs -f"
+echo "Stop services:       docker compose down"
+echo "Restart services:    docker compose restart"
+echo "Remove volumes:      docker compose down -v"
 echo ""

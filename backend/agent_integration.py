@@ -8,6 +8,7 @@ This module handles:
 - Thread-safe event processing
 """
 
+import atexit
 import threading
 import logging
 
@@ -23,9 +24,9 @@ class AgentIntegration:
         self.running = False
         self.lock = threading.Lock()
     
-    def _on_event(self, event_data):
+    def _on_event(self, event_type, event_data):
         """Handle event from orchestrator."""
-        logger.debug(f'Event processed: {event_data}')
+        logger.debug(f'Event processed: {event_type} {event_data}')
     
     def init_app(self, app):
         """Initialize agents with Flask app context."""
@@ -37,22 +38,17 @@ class AgentIntegration:
             except ImportError:
                 from .agents.orchestrator import EventOrchestrator
                 from .models_extended import db
-            
-            with app.app_context():
-                # Create orchestrator instance
-                self.orchestrator = EventOrchestrator(
-                    db_session=db.session,
-                    on_event_callback=self._on_event
-                )
-                
-                # Register cleanup on app shutdown
-                def cleanup(exc=None):
-                    self.stop_agents()
-                
-                app.teardown_appcontext(cleanup)
-                
-                logger.info('Agent integration initialized')
-            
+
+            self.orchestrator = EventOrchestrator(
+                app,
+                db,
+                on_event_callback=self._on_event
+            )
+
+            atexit.register(self.stop_agents)
+
+            logger.info('Agent integration initialized')
+
             return self
         except Exception as e:
             logger.error(f'Failed to initialize agent integration: {e}')

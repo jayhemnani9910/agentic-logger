@@ -13,8 +13,9 @@ const EnhancedClipboardCard = ({ event, onDetailClick }) => {
     }
   }
 
-  const contentAnalysis = metadata.content || {};
-  const systemState = metadata.system || {};
+  // The list API sends these as flat fields
+  const contentAnalysis = metadata;
+  const systemState = metadata;
 
   // Determine content icon
   const getContentIcon = () => {

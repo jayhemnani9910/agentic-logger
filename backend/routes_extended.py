@@ -11,7 +11,8 @@ Provides REST endpoints for:
 
 from flask import request, jsonify
 from datetime import datetime, timedelta
-from sqlalchemy import func, desc
+from sqlalchemy import cast, func, desc
+from sqlalchemy.dialects.postgresql import JSONB
 import json
 
 try:
@@ -28,7 +29,13 @@ except ImportError:
 
 def _escape_like(s):
     """Escape LIKE wildcard characters in user input."""
-    return s.replace('%', r'\%').replace('_', r'\_')
+    return s.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')
+
+
+def _content_flag(name):
+    """SQL expression for a boolean in event_metadata's content section."""
+    flag = cast(ClipboardEvent.event_metadata, JSONB)['content'][name].as_boolean()
+    return func.coalesce(flag, False)
 
 
 def _parse_metadata(raw_metadata):
@@ -99,25 +106,14 @@ def register_extended_routes(app):
             # Metadata-based content type filter
             # This checks the event_metadata JSON for detected content types
             if content_type_filter:
-                if content_type_filter == 'url':
-                    # Filter by JSON metadata where is_url is true
-                    query = query.filter(
-                        ClipboardEvent.event_metadata.astext.contains('"is_url": true')
-                    )
-                elif content_type_filter == 'code':
-                    query = query.filter(
-                        ClipboardEvent.event_metadata.astext.contains('"is_code": true')
-                    )
-                elif content_type_filter == 'json':
-                    query = query.filter(
-                        ClipboardEvent.event_metadata.astext.contains('"is_json": true')
-                    )
+                if content_type_filter in ('url', 'code', 'json'):
+                    query = query.filter(_content_flag(f'is_{content_type_filter}'))
                 elif content_type_filter == 'text':
                     # Text is default when none of the others match
                     query = query.filter(
-                        ~ClipboardEvent.event_metadata.astext.contains('"is_url": true') &
-                        ~ClipboardEvent.event_metadata.astext.contains('"is_code": true') &
-                        ~ClipboardEvent.event_metadata.astext.contains('"is_json": true')
+                        ~_content_flag('is_url'),
+                        ~_content_flag('is_code'),
+                        ~_content_flag('is_json')
                     )
             
             # Get total count before pagination
@@ -279,7 +275,7 @@ def register_extended_routes(app):
                     'user': e.user_name,
                     'working_dir': e.working_directory,
                     'exit_code': e.exit_code,
-                    'success': e.exit_code == 0,
+                    'success': None if e.exit_code is None else e.exit_code == 0,
                     'created_at': e.created_at.isoformat() if e.created_at else None,
                     'system_state': {
                         'cpu_percent': system_state.get('cpu_percent'),
@@ -374,7 +370,7 @@ def register_extended_routes(app):
                         'timestamp': e.timestamp.isoformat() if e.timestamp else None,
                         'title': 'Shell Command',
                         'summary': e.command,
-                        'tags': [f"exit:{e.exit_code}"],
+                        'tags': [f"exit:{e.exit_code}"] if e.exit_code is not None else [],
                         'relevance': 'high'
                     })
             
@@ -493,7 +489,7 @@ def register_extended_routes(app):
                     'is_json': content_analysis.get('is_json', False),
                     'line_count': content_analysis.get('line_count', 0),
                     'word_count': content_analysis.get('word_count', 0),
-                    'hash': content_analysis.get('hash', '')
+                    'hash': content_analysis.get('content_hash', '')
                 },
                 'system_state': {
                     'cpu_percent': system_state.get('cpu_percent'),
@@ -506,7 +502,8 @@ def register_extended_routes(app):
                     'window': activity_context.get('window')
                 },
                 'system_info': metadata.get('system_info', {}),
-                'ocr_count': len(event.ocr_results) if hasattr(event, 'ocr_results') else 0
+                'ocr_count': len(event.ocr_results) if hasattr(event, 'ocr_results') else 0,
+                'full_metadata': metadata
             }), 200
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -562,8 +559,8 @@ def register_extended_routes(app):
             metadata = _parse_metadata(event.event_metadata)
             system_state = metadata.get('system', {})
             system_info = metadata.get('system_info', {})
-            success = event.exit_code == 0
-            status_icon = '✅' if success else '❌'
+            success = None if event.exit_code is None else event.exit_code == 0
+            status_icon = '❔' if success is None else '✅' if success else '❌'
             
             return jsonify({
                 'success': True,

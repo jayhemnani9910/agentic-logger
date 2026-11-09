@@ -1,44 +1,51 @@
-# Agentic Logger - Implementation Summary
+# Agentic Logger
 
-## Files Created
+Logs your clipboard, active window and shell commands to PostgreSQL, adds local LLM
+summaries with Ollama, and shows it all in a Flask + React dashboard.
 
-```
-agentic_logger/
-├── docker-compose.yml          # All services orchestration
-├── .env                         # Environment variables
-├── setup.sh                     # Setup automation script
-├── run.sh                       # Quick start runner
-├── RUN_STEPS.md                 # Detailed execution guide
-├── CHECKLIST.md                 # Task completion status
-└── backend/
-    ├── Dockerfile               # Backend container
-    ├── app.py                   # Flask application factory
-    ├── models.py                # Database models (Event, AgentSession)
-    ├── routes.py                # API endpoints
-    ├── agent_logger.py          # Agent logging module
-    ├── config.py                # Configuration management
-    ├── requirements.txt         # Python dependencies
-    └── init.sql                 # Database initialization
-```
-
-## Services Deployed
+## Services
 
 | Service | Port | Function |
 |---------|------|----------|
+| UI | 3000 | React dashboard |
 | API Backend | 8000 | Flask REST API |
 | PostgreSQL | 5432 | Event & session storage |
 | Redis | 6379 | Cache & message broker |
-| Elasticsearch | 9200 | Log aggregation & search |
-| Milvus | 19530 | Vector database |
-| Temporal | 7233 | Workflow orchestration |
+
+All ports are published on 127.0.0.1 only.
 
 ## Quick Start
 
 ```bash
-cd /home/jey/jh-core/agentic_logger
-chmod +x setup.sh
 ./setup.sh
 ```
+
+Capture runs on your machine, not in Docker:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r backend/requirements.txt
+python local_agent_runner.py
+```
+
+Settings, as environment variables:
+
+- `OLLAMA_MODEL`, default `qwen3.5:4b`
+- `OLLAMA_URL`, default `http://localhost:11434`
+- `POSTGRES_PASSWORD`, default `postgres`
+- `POSTGRES_URL`, used by the runner
+- `CORS_ORIGINS`, comma separated
+- `IMAGE_DIR`, where copied images are kept
+
+Needed on your machine:
+
+- `xclip` or `wl-clipboard` for the clipboard
+- `tesseract-ocr` for text from copied images
+- `xdotool` for window tracking on X11
+- The Window Calls GNOME extension for window tracking on GNOME Wayland
+
+Text that looks like a credential is replaced with a placeholder before saving.
+The API has no login, so keep it on localhost.
 
 ## API Endpoints
 
@@ -55,27 +62,18 @@ chmod +x setup.sh
 ### Stats
 - `GET /api/stats/summary` - Get statistics
 
+### Activity
+- `GET /api/clipboard`, `/api/activity`, `/api/commands` - List captured events
+- `GET /api/stats` - Capture statistics
+- `POST /api/search` - Search all captured events
+- `POST /api/search/semantic`, `/api/search/keywords` - Search clipboard events
+
 ### Health
 - `GET /health` - Health check
-
-## Implementation Notes
-
-✅ Multi-container Docker setup
-✅ Database schema with indexes
-✅ REST API with CRUD operations
-✅ Event logging framework
-✅ Agent session tracking
-✅ Caching layer (Redis)
-✅ Log aggregation (Elasticsearch)
-✅ Vector DB support (Milvus)
-✅ Workflow engine (Temporal)
-✅ Configuration management
-✅ Environment variables
-✅ Health checks
 
 ## Next Steps
 
 1. `./setup.sh` - Initialize infrastructure
-2. `docker-compose logs -f` - Monitor startup
+2. `docker compose logs -f` - Monitor startup
 3. `curl http://localhost:8000/health` - Verify API
 4. Visit `http://localhost:3000` - Frontend UI

@@ -1,6 +1,10 @@
 """
 Activity Watcher Agent - Track active window/application
 """
+import ast
+import json
+import os
+import re
 import threading
 import time
 import subprocess
@@ -24,56 +28,90 @@ class ActivityWatcher:
         self.last_window = None
         self.last_app = None
     
+    @staticmethod
+    def _call_window_calls(method: str, *args: str) -> Optional[str]:
+        """Call the GNOME Window Calls extension and return its string result"""
+        result = subprocess.run(
+            ['gdbus', 'call', '--session',
+             '--dest', 'org.gnome.Shell',
+             '--object-path', '/org/gnome/Shell/Extensions/Windows',
+             '--method', f'org.gnome.Shell.Extensions.Windows.{method}', *args],
+            capture_output=True,
+            timeout=2,
+            text=True
+        )
+        if result.returncode != 0:
+            return None
+        return ast.literal_eval(result.stdout.strip())[0]
+
+    def _read_gnome_window(self) -> Optional[tuple[str, Optional[str]]]:
+        """Return (title, app name) of the focused window on GNOME Wayland"""
+        listing = self._call_window_calls('List')
+        if not listing:
+            return None
+
+        focused = next((window for window in json.loads(listing) if window.get('focus')), None)
+        if not focused:
+            return None
+
+        title = focused.get('title') or self._call_window_calls('GetTitle', str(focused['id']))
+        return (title, focused.get('wm_class')) if title else None
+
+    def _read_x11_window(self) -> Optional[tuple[str, Optional[str]]]:
+        """Return (title, no app name) of the focused window through xdotool"""
+        result = subprocess.run(
+            ['xdotool', 'getactivewindow', 'getwindowname'],
+            capture_output=True,
+            timeout=2,
+            text=True
+        )
+        return (result.stdout.strip(), None) if result.returncode == 0 else None
+
+    @staticmethod
+    def _is_gnome_wayland() -> bool:
+        return (os.environ.get('XDG_SESSION_TYPE') == 'wayland'
+                and 'GNOME' in os.environ.get('XDG_CURRENT_DESKTOP', ''))
+
     def _get_active_window(self) -> Optional[Dict[str, Any]]:
         """Get current active window information"""
+        read_window = self._read_gnome_window if self._is_gnome_wayland() else self._read_x11_window
         try:
-            # Try xdotool (X11)
-            result = subprocess.run(
-                ['xdotool', 'getactivewindow', 'getwindowname'],
-                capture_output=True,
-                timeout=2,
-                text=True
-            )
-            
-            if result.returncode == 0:
-                window_title = result.stdout.strip()
-                
-                # Try to extract application name
-                if ' - ' in window_title:
-                    app_name = window_title.split(' - ')[-1]
-                elif ':' in window_title:
-                    app_name = window_title.split(':')[0]
-                else:
-                    app_name = window_title
-                
-                # Extract URL if browser
-                url = None
-                if any(browser in app_name.lower() for browser in
-                       ['firefox', 'chrome', 'chromium', 'safari', 'edge']):
-                    url = self._extract_browser_url(window_title)
-                
-                return {
-                    'window_title': window_title,
-                    'application': app_name,
-                    'url': url,
-                    'timestamp': datetime.utcnow()
-                }
-        except (FileNotFoundError, subprocess.SubprocessError, OSError):
-            pass
-        
-        return None
-    
-    def _extract_browser_url(self, window_title: str) -> Optional[str]:
-        """Extract URL from browser window title"""
-        try:
-            if " - " in window_title:
-                potential_url = window_title.split(" - ")[-1]
-                if potential_url.startswith(("http://", "https://")):
-                    return potential_url
+            window = read_window()
+        except (FileNotFoundError, subprocess.SubprocessError, OSError, ValueError, SyntaxError):
             return None
-        except Exception:
+
+        if not window:
             return None
-    
+
+        window_title, app_name = window
+
+        # Without a reported app name, fall back to parsing the title
+        if not app_name:
+            if ' - ' in window_title:
+                app_name = window_title.split(' - ')[-1]
+            elif ':' in window_title:
+                app_name = window_title.split(':')[0]
+            else:
+                app_name = window_title
+
+        url = None
+        if any(browser in app_name.lower() for browser in
+               ['firefox', 'chrome', 'chromium', 'safari', 'edge']):
+            url = self._extract_browser_url(window_title)
+
+        return {
+            'window_title': window_title[:500],
+            'application': app_name[:255],
+            'url': url[:500] if url else None,
+            'timestamp': datetime.utcnow()
+        }
+
+    @staticmethod
+    def _extract_browser_url(window_title: str) -> Optional[str]:
+        """Return a URL shown in a browser window title, if there is one"""
+        match = re.search(r'https?://\S+', window_title)
+        return match.group(0) if match else None
+
     def _check_activity(self):
         """Check if active window changed"""
         window_info = self._get_active_window()
@@ -106,7 +144,13 @@ class ActivityWatcher:
         """Start watching activity"""
         if self.running:
             return
-        
+
+        if self._get_active_window() is None:
+            if self._is_gnome_wayland():
+                print("Warning: activity tracking needs the 'Window Calls' GNOME extension. No window data will be saved.")
+            else:
+                print("Warning: cannot read the active window (is xdotool installed?). No window data will be saved.")
+
         self.running = True
         self.thread = threading.Thread(target=self._watch_loop, daemon=True)
         self.thread.start()

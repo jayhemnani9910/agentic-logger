@@ -4,7 +4,7 @@ services:
     image: node:18-alpine
     container_name: agentic-logger-ui
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - REACT_APP_API_URL=http://localhost:8000
       - REACT_APP_WS_URL=ws://localhost:8000/ws
@@ -24,20 +24,24 @@ services:
       dockerfile: Dockerfile
     container_name: agentic-logger-backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - FLASK_ENV=production
       - REDIS_URL=redis://redis:6379
-      - POSTGRES_URL=postgresql://postgres:postgres@postgres:5432/agentic_logger
+      - POSTGRES_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/agentic_logger
       - WORKERS=1
       - TIMEOUT=120
       - LOG_LEVEL=INFO
+    restart: unless-stopped
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
       - ./backend:/app
       - ./logs:/app/logs
+      - huggingface_cache:/root/.cache/huggingface
     networks:
       - agentic-network
     healthcheck:
@@ -52,7 +56,7 @@ services:
     image: redis:7-alpine
     container_name: agentic-logger-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -70,17 +74,17 @@ services:
     container_name: agentic-logger-postgres
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=agentic_logger
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - agentic-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -88,6 +92,7 @@ services:
 volumes:
   redis_data:
   postgres_data:
+  huggingface_cache:
 
 networks:
   agentic-network:

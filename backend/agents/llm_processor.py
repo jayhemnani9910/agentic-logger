@@ -1,26 +1,41 @@
 """
 LLM Processing Agent - Process clipboard content with local LLM
 """
-import subprocess
 import json
+import os
+import time
 import requests
 from datetime import datetime
 from typing import Optional, Dict, Any
 
+OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'qwen3.5:4b')
+AVAILABILITY_CHECK_SECONDS = 30
+
 class LLMProcessor:
     """Process content with local LLM via Ollama"""
     
-    def __init__(self, model: str = "qwen2.5:3b", ollama_url: str = "http://localhost:11434"):
+    def __init__(self, model: str = OLLAMA_MODEL, ollama_url: str = OLLAMA_URL):
         """
         Initialize LLM processor
         Args:
-            model: Model to use (default: qwen2.5:3b)
+            model: Model to use
             ollama_url: URL to Ollama server
         """
         self.model = model
         self.ollama_url = ollama_url
-        self.available = self._check_ollama()
         self.embedding_model = None
+        self._available = False
+        self._next_availability_check = 0.0
+    
+    @property
+    def available(self) -> bool:
+        """Whether Ollama is reachable, rechecked every AVAILABILITY_CHECK_SECONDS"""
+        now = time.monotonic()
+        if now >= self._next_availability_check:
+            self._available = self._check_ollama()
+            self._next_availability_check = now + AVAILABILITY_CHECK_SECONDS
+        return self._available
     
     def _check_ollama(self) -> bool:
         """Check if Ollama is running"""
@@ -95,22 +110,12 @@ Summary:"""
     def generate_embedding(self, text: str) -> Optional[list]:
         """Generate vector embeddings for semantic search"""
         try:
-            import numpy as np
+            from sentence_transformers import SentenceTransformer
             
-            # Use Sentence Transformers for embedding generation
-            try:
-                from sentence_transformers import SentenceTransformer
-                
-                if not self.embedding_model:
-                    self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-                
-                embedding = self.embedding_model.encode([text])
-                return embedding[0].tolist()
-            except ImportError:
-                # Fallback to simple hash-based embedding
-                import hashlib
-                hash_obj = hashlib.md5(text.encode())
-                return [int(b) for b in hash_obj.digest()]
+            if not self.embedding_model:
+                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            
+            return self.embedding_model.encode([text])[0].tolist()
         except Exception as e:
             print(f"Error generating embedding: {e}")
             return None
@@ -131,9 +136,12 @@ Respond ONLY with a JSON array of tags:
         
         if result:
             try:
-                return json.loads(result)
+                tags = json.loads(result)
+                if isinstance(tags, list):
+                    return tags
             except (json.JSONDecodeError, ValueError):
-                return [tag.strip() for tag in result.split(',')[:5]]
+                pass
+            return [tag.strip() for tag in result.split(',')[:5]]
         
         return None
     
@@ -164,122 +172,3 @@ Respond ONLY with a JSON array of tags:
             result['processed']['tags'] = tags
         
         return result
-    
-
-
-class OllamaManager:
-    """Manage Ollama service"""
-    
-    @staticmethod
-    def is_running() -> bool:
-        """Check if Ollama is running"""
-        try:
-            response = requests.get("http://localhost:11434/api/tags", timeout=2)
-            return response.status_code == 200
-        except (requests.RequestException, OSError):
-            return False
-
-    @staticmethod
-    def start_ollama() -> bool:
-        """Try to start Ollama service"""
-        try:
-            # Try common installation locations
-            paths = [
-                '/usr/local/bin/ollama',
-                '/opt/ollama/bin/ollama',
-                'ollama'
-            ]
-            
-            for path in paths:
-                try:
-                    subprocess.Popen(
-                        [path, 'serve'],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
-                    )
-                    return True
-                except (FileNotFoundError, OSError):
-                    continue
-        except Exception:
-            pass
-        
-        return False
-    
-    @staticmethod
-    def pull_model(model: str = "qwen:3b") -> bool:
-        """Pull a model from Ollama library"""
-        try:
-            result = subprocess.run(
-                ['ollama', 'pull', model],
-                timeout=300  # 5 minutes
-            )
-            return result.returncode == 0
-        except (FileNotFoundError, subprocess.SubprocessError, OSError):
-            return False
-
-    @staticmethod
-    def list_models() -> list[str]:
-        """List available models"""
-        try:
-            response = requests.get("http://localhost:11434/api/tags", timeout=2)
-            if response.status_code == 200:
-                data = response.json()
-                return [m['name'] for m in data.get('models', [])]
-        except (requests.RequestException, OSError):
-            pass
-
-        return []
-
-
-if __name__ == '__main__':
-    # Test LLM processor
-    print("🤖 LLM Processor Test")
-    
-    # Check Ollama
-    if not OllamaManager.is_running():
-        print("❌ Ollama not running")
-        print("   Starting Ollama...")
-        if OllamaManager.start_ollama():
-            print("   ✅ Ollama started")
-            import time
-            time.sleep(5)
-        else:
-            print("   ❌ Failed to start Ollama")
-            print("   Install from: https://ollama.ai")
-            exit(1)
-    else:
-        print("✅ Ollama is running")
-    
-    # Check models
-    models = OllamaManager.list_models()
-    print(f"📦 Available models: {models}")
-    
-    if not models:
-        print("   Pulling Qwen 3B...")
-        if OllamaManager.pull_model("qwen:3b"):
-            print("   ✅ Model pulled")
-        else:
-            print("   ❌ Failed to pull model")
-    
-    # Test processing
-    processor = LLMProcessor()
-    
-    if processor.available:
-        print("\n📝 Testing content processing...")
-        test_content = "sudo apt update && apt install nginx"
-        
-        print(f"Input: {test_content}")
-        
-        # Classify
-        classification = processor.classify_content(test_content)
-        print(f"Classification: {classification}")
-        
-        # Summarize
-        summary = processor.summarize_content(test_content)
-        print(f"Summary: {summary}")
-        
-        # Tags
-        tags = processor.extract_tags(test_content)
-        print(f"Tags: {tags}")
-    else:
-        print("❌ LLM not available")

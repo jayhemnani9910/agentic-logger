@@ -35,8 +35,10 @@ const ActivityDashboard = () => {
 
   // Semantic search function
   const handleSemanticSearch = async (query) => {
+    if (!query.trim()) return;
     try {
       setLoading(true);
+      setSearchResults([]);
       const response = await axios.post(`${apiUrl}/api/search/semantic`, {
         query: query,
         limit: 20
@@ -55,10 +57,12 @@ const ActivityDashboard = () => {
 
   // Keyword search function
   const handleKeywordSearch = async (keywords) => {
+    if (!keywords.trim()) return;
     try {
       setLoading(true);
+      setSemanticResults([]);
       const response = await axios.post(`${apiUrl}/api/search/keywords`, {
-        keywords: keywords.split(/\s+/),
+        keywords: keywords.trim().split(/\s+/),
         limit: 50
       });
       if (response.data && response.data.results) {
@@ -145,29 +149,6 @@ const ActivityDashboard = () => {
       console.error('Failed to fetch stats:', err);
     }
   }, [filters.hours, apiUrl]);
-
-  // Perform semantic search
-  const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) return;
-    
-    try {
-      setLoading(true);
-      const response = await axios.post(`${apiUrl}/api/search`, {
-        query: searchQuery,
-        types: ['clipboard', 'activity', 'commands'],
-        limit: filters.limit,
-        hours: filters.hours
-      });
-      if (response.data.success) {
-        setSearchResults(response.data.data);
-        setActiveTab('search');
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [searchQuery, filters, apiUrl]);
 
   // Initial load and refresh on tab change
   useEffect(() => {
@@ -351,8 +332,8 @@ const ActivityDashboard = () => {
                     >
                       <div className="command-header">
                         <span className="command-time">{new Date(event.timestamp).toLocaleTimeString()}</span>
-                        <span className={`exit-code ${event.exit_code === 0 ? 'success' : 'error'}`}>
-                          {event.exit_code === 0 ? '✅' : '❌'} Exit {event.exit_code}
+                        <span className={`exit-code ${event.exit_code == null ? '' : event.exit_code === 0 ? 'success' : 'error'}`}>
+                          {event.exit_code == null ? '❔ Exit unknown' : `${event.exit_code === 0 ? '✅' : '❌'} Exit ${event.exit_code}`}
                         </span>
                       </div>
                       <div className="command-body">

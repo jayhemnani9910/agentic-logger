@@ -2,7 +2,7 @@
 API Routes and Endpoints
 """
 from flask import Blueprint, request, jsonify
-from app import db
+from extensions import db
 from models import Event, AgentSession
 from datetime import datetime, timedelta
 from sqlalchemy import text
@@ -95,12 +95,18 @@ def create_session():
     try:
         data = request.get_json()
         
-        session = AgentSession(
-            agent_id=data.get('agent_id'),
-            info=data.get('info')
-        )
+        agent_id = data.get('agent_id')
+        session = AgentSession.query.filter_by(agent_id=agent_id).first()
         
-        db.session.add(session)
+        if session:
+            session.status = 'active'
+            session.started_at = datetime.utcnow()
+            session.ended_at = None
+            session.info = data.get('info')
+        else:
+            session = AgentSession(agent_id=agent_id, info=data.get('info'))
+            db.session.add(session)
+        
         db.session.commit()
         
         return jsonify(session.to_dict()), 201
@@ -209,7 +215,7 @@ def keyword_search():
             return jsonify({'error': 'Keywords parameter required'}), 400
         
         def escape_like(s):
-            return s.replace('%', r'\%').replace('_', r'\_')
+            return s.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')
 
         query_filter = None
         for keyword in keywords:

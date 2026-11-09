@@ -215,7 +215,7 @@ const EventDetailModal = ({ eventId, eventType, onClose }) => {
             <div className="info-item">
               <label>Status:</label>
               <span className={`status-badge ${data.basic?.success ? 'success' : 'error'}`}>
-                {data.basic?.status} Exit Code: {data.basic?.exit_code}
+                {data.basic?.status} Exit Code: {data.basic?.exit_code ?? 'unknown'}
               </span>
             </div>
 
