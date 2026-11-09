@@ -5,13 +5,13 @@ import json
 import logging
 import os
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import requests
 
 try:
-    from models_extended import ClipboardEvent, ActivityEvent, CommandEvent, db
+    from models_extended import ClipboardEvent, CommandEvent
 except ImportError:
-    from .models_extended import ClipboardEvent, ActivityEvent, CommandEvent, db
+    from .models_extended import ClipboardEvent, CommandEvent
 
 logger = logging.getLogger(__name__)
 

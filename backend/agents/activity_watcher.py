@@ -171,7 +171,7 @@ class ActivityWatcher:
 if __name__ == '__main__':
     # Test activity watcher
     def on_activity_change(info):
-        print(f"\n🪟 Activity Changed:")
+        print("\n🪟 Activity Changed:")
         print(f"   App: {info['application']}")
         print(f"   Window: {info['window_title']}")
         if info.get('url'):

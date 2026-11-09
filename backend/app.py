@@ -2,8 +2,6 @@
 Main Flask Application Factory
 """
 import os
-import logging
-from datetime import datetime
 from flask import Flask, jsonify
 from flask_cors import CORS
 
@@ -40,7 +38,7 @@ def create_app(config_name='production'):
         from llm_processor import register_processing_routes, start_background_processor
         register_processing_routes(app, db)
         # Start background processor in development
-        if config_name != 'production':
+        if config_name != 'production' and not app.config.get('TESTING'):
             start_background_processor(app, db, interval=60)
         app.logger.info('LLM processing initialized')
     except Exception as e:
