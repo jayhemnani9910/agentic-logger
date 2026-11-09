@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify
 from extensions import db
 from models import Event, AgentSession
 from datetime import datetime, timedelta
-from sqlalchemy import text
+from sqlalchemy import or_, text
 
 api_bp = Blueprint('api', __name__)
 health_bp = Blueprint('health', __name__)
@@ -217,14 +217,10 @@ def keyword_search():
         def escape_like(s):
             return s.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')
 
-        query_filter = None
-        for keyword in keywords:
-            escaped = escape_like(keyword)
-            condition = ClipboardEvent.raw_content.ilike(f'%{escaped}%')
-            query_filter = condition if query_filter is None else (query_filter | condition)
+        conditions = [ClipboardEvent.raw_content.ilike(f'%{escape_like(keyword)}%') for keyword in keywords]
         
         results = db.session.query(ClipboardEvent).filter(
-            query_filter
+            or_(*conditions)
         ).order_by(ClipboardEvent.timestamp.desc()).limit(limit).all()
         
         return jsonify({

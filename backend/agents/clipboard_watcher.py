@@ -2,6 +2,7 @@
 Clipboard Watcher Agent
 Monitors clipboard for copy/paste events with event-driven architecture
 """
+import importlib.util
 import os
 import shutil
 import sys
@@ -55,12 +56,8 @@ class ClipboardWatcher:
         if os.environ.get('WAYLAND_DISPLAY') and shutil.which('wl-paste'):
             return 'wl-clipboard'
 
-        if sys.platform != 'linux':
-            try:
-                import pyperclip
-                return 'pyperclip'
-            except ImportError:
-                pass
+        if sys.platform != 'linux' and importlib.util.find_spec('pyperclip'):
+            return 'pyperclip'
 
         return 'none'
 
@@ -234,7 +231,7 @@ class ClipboardEventExtractor:
         return 'text'
     
     @staticmethod
-    def get_active_window() -> Optional[Dict[str, Any]]:
+    def get_active_window() -> Dict[str, Any]:
         """Get current active window information"""
         try:
             result = subprocess.run(
@@ -267,7 +264,7 @@ if __name__ == '__main__':
         is_text = data['type'] == 'text'
         content_type = ClipboardEventExtractor.get_content_type(data['content']) if is_text else 'image'
         window_info = ClipboardEventExtractor.get_active_window()
-        print(f"\n📋 Clipboard Event:")
+        print("\n📋 Clipboard Event:")
         print(f"   Type: {content_type}")
         preview = data['content'][:100] if is_text else f"{len(data['content'])} bytes"
         print(f"   Content: {preview}")

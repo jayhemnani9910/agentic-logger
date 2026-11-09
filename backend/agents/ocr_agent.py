@@ -111,7 +111,7 @@ class OCRAgent:
                 'timestamp': datetime.utcnow()
             }
     
-    def process_clipboard_image(self, image_data: bytes = None) -> Optional[Dict[str, Any]]:
+    def process_clipboard_image(self, image_data: Optional[bytes] = None) -> Optional[Dict[str, Any]]:
         """
         Process image from clipboard
         Args:
@@ -197,8 +197,8 @@ if __name__ == '__main__':
         # Try to process an image if one is provided
         import sys
         if len(sys.argv) > 1:
-            result = ocr.process_image(sys.argv[1])
-            print(f"\nOCR Result:")
+            result = ocr.process_image(sys.argv[1]) or {}
+            print("\nOCR Result:")
             print(f"  Success: {result.get('success')}")
             print(f"  Text: {result.get('extracted_text', '')[:200]}")
         else:

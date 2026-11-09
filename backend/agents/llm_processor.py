@@ -145,7 +145,7 @@ Respond ONLY with a JSON array of tags:
         
         return None
     
-    def process_text_event(self, content: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def process_text_event(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Process a clipboard text event"""
         result = {
             'raw_content': content,
