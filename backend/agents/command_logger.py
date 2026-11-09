@@ -26,16 +26,16 @@ class CommandLogger:
                 with open(self.bash_history_file, 'r', encoding='utf-8', errors='ignore') as f:
                     f.seek(0, 2)  # Seek to end
                     return self.bash_history_file, f.tell()
-            except:
+            except OSError:
                 pass
-        
+
         # Try zsh
         if os.path.exists(self.zsh_history_file):
             try:
                 with open(self.zsh_history_file, 'r', encoding='utf-8', errors='ignore') as f:
                     f.seek(0, 2)
                     return self.zsh_history_file, f.tell()
-            except:
+            except OSError:
                 pass
         
         return None, 0
@@ -72,7 +72,7 @@ class CommandLogger:
                             'shell': 'zsh',
                             'timestamp': timestamp
                         })
-                    except:
+                    except (ValueError, IndexError):
                         pass
             else:
                 commands.append({
@@ -116,15 +116,16 @@ class CommandLogger:
     def monitor_commands(self, on_command_callback=None, check_interval: int = 5):
         """Monitor for new commands in real-time"""
         def monitor_loop():
+            last_command = None
             while True:
                 try:
                     recent = self.get_recent_commands(limit=1)
-                    
-                    if recent and recent[0] not in self.commands_cache:
-                        self.commands_cache = recent
+
+                    if recent and recent[0]['command'] != last_command:
+                        last_command = recent[0]['command']
                         if on_command_callback:
                             on_command_callback(recent[0])
-                    
+
                     time.sleep(check_interval)
                 except Exception as e:
                     print(f"Error in command monitor: {e}")
@@ -148,9 +149,9 @@ class SnoopyCommandLogger:
                 timeout=2
             )
             return result.returncode == 0
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             return False
-    
+
     @staticmethod
     def get_snoopy_log_path() -> Optional[str]:
         """Get Snoopy log file path"""
@@ -190,9 +191,9 @@ class SnoopyCommandLogger:
                             'source': 'snoopy',
                             'timestamp': datetime.utcnow()
                         })
-        except:
+        except OSError:
             pass
-        
+
         return commands
 
 

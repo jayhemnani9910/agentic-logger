@@ -14,9 +14,6 @@ class Config:
         'postgresql://postgres:postgres@localhost:5432/agentic_logger'
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
-    ELASTICSEARCH_HOST = os.getenv('ELASTICSEARCH_HOST', 'localhost')
-    ELASTICSEARCH_PORT = int(os.getenv('ELASTICSEARCH_PORT', 9200))
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     WORKERS = int(os.getenv('WORKERS', 4))
     TIMEOUT = int(os.getenv('TIMEOUT', 120))

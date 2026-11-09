@@ -212,7 +212,7 @@ const ActivityDashboard = () => {
               placeholder="Search activities semantically..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   if (e.shiftKey) {
                     handleKeywordSearch(searchQuery);

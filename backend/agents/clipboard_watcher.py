@@ -32,42 +32,27 @@ class ClipboardWatcher:
         self.fallback_polling = False
         self.xclip_process = None
         
-        # Initialize X11 clipboard monitoring
-        try:
-            from pyperclip import paste
-
-            # Use xclip for X11 selection events (event-driven)
-            self.xclip_process = subprocess.Popen(
-                ["xclip", "-selection", "clipboard", "-o"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            logger.info("X11 event-driven clipboard monitoring initialized")
-        except ImportError:
-            # Fallback to polling if xclip not available
-            self.check_interval = check_interval
-            self.fallback_polling = True
-            logger.warning("xclip not available, falling back to polling mode")
+        self.fallback_polling = self.platform == 'pyperclip' or self.platform == 'none'
     
     def _detect_platform(self) -> str:
         """Detect clipboard manager available on system"""
         try:
-            subprocess.run(['xclip', '-selection', 'clipboard', '-o'], 
+            subprocess.run(['xclip', '-selection', 'clipboard', '-o'],
                          capture_output=True, timeout=1)
             return 'xclip'
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             pass
-        
+
         try:
             subprocess.run(['wl-paste'], capture_output=True, timeout=1)
             return 'wl-clipboard'
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             pass
-        
+
         try:
             import pyperclip
             return 'pyperclip'
-        except:
+        except ImportError:
             pass
         
         return 'none'
@@ -162,6 +147,9 @@ class ClipboardWatcher:
         self.running = False
         if self.thread:
             self.thread.join(timeout=5)
+        if self.xclip_process:
+            self.xclip_process.terminate()
+            self.xclip_process = None
         print("Clipboard watcher stopped")
     
     def get_current(self) -> Optional[Dict[str, Any]]:

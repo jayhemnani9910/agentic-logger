@@ -35,7 +35,7 @@ class OllamaProcessor:
         try:
             response = requests.get(f'{self.ollama_url}/api/tags', timeout=5)
             return response.status_code == 200
-        except:
+        except (requests.RequestException, OSError):
             logger.warning('Ollama service not available')
             return False
     
@@ -223,9 +223,9 @@ class OllamaProcessor:
 class ProcessingQueue:
     """Manage processing queue for events"""
     
-    def __init__(self, db_session, ollama_url: str = 'http://localhost:11434'):
+    def __init__(self, db, ollama_url: str = 'http://localhost:11434'):
         """Initialize processing queue"""
-        self.db = db_session
+        self.db = db
         self.processor = OllamaProcessor(ollama_url=ollama_url)
         self.logger = logging.getLogger(__name__)
     

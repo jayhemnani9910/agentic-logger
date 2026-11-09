@@ -114,7 +114,7 @@ class LocalAgentRunner:
         try:
             json.loads(content)
             return True
-        except:
+        except (json.JSONDecodeError, ValueError):
             return False
     
     def _setup_database(self):

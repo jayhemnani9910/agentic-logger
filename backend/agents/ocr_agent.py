@@ -40,9 +40,9 @@ class OCRAgent:
                 timeout=5
             )
             return result.returncode == 0
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             return False
-    
+
     def process_image(self, image_path: str) -> Optional[Dict[str, Any]]:
         """
         Extract text from image using OCR
@@ -148,9 +148,9 @@ class OCRAgent:
             )
             if result.returncode == 0 and result.stdout:
                 return result.stdout
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             pass
-        
+
         try:
             # Try wl-paste (Wayland)
             result = subprocess.run(
@@ -160,7 +160,7 @@ class OCRAgent:
             )
             if result.returncode == 0 and result.stdout:
                 return result.stdout
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             pass
         
         return None
@@ -188,9 +188,9 @@ class OCRAgent:
             )
             if result.returncode == 0:
                 return output_path
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             pass
-        
+
         try:
             # Try import (ImageMagick)
             result = subprocess.run(
@@ -200,9 +200,9 @@ class OCRAgent:
             )
             if result.returncode == 0:
                 return output_path
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             pass
-        
+
         try:
             # Try scrot
             result = subprocess.run(
@@ -212,7 +212,7 @@ class OCRAgent:
             )
             if result.returncode == 0:
                 return output_path
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             pass
         
         return None

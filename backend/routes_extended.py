@@ -26,6 +26,11 @@ except ImportError:
     from .models import db
 
 
+def _escape_like(s):
+    """Escape LIKE wildcard characters in user input."""
+    return s.replace('%', r'\%').replace('_', r'\_')
+
+
 def _parse_metadata(raw_metadata):
     """Parse event_metadata, handling both string and dict forms."""
     if not raw_metadata:
@@ -75,14 +80,15 @@ def register_extended_routes(app):
             
             # Search filter (exact content type)
             if search_text:
+                escaped = _escape_like(search_text)
                 query = query.filter(
-                    (ClipboardEvent.raw_content.ilike(f'%{search_text}%')) |
-                    (ClipboardEvent.processed_summary.ilike(f'%{search_text}%'))
+                    (ClipboardEvent.raw_content.ilike(f'%{escaped}%')) |
+                    (ClipboardEvent.processed_summary.ilike(f'%{escaped}%'))
                 )
-            
+
             # App filter
             if app_filter:
-                query = query.filter(ClipboardEvent.source_app.ilike(f'%{app_filter}%'))
+                query = query.filter(ClipboardEvent.source_app.ilike(f'%{_escape_like(app_filter)}%'))
             
             # Size filters (filter by raw_content length)
             if min_size is not None:
@@ -181,13 +187,14 @@ def register_extended_routes(app):
             
             # Application filter
             if app_filter:
-                query = query.filter(ActivityEvent.application.ilike(f'%{app_filter}%'))
-            
+                query = query.filter(ActivityEvent.application.ilike(f'%{_escape_like(app_filter)}%'))
+
             # Search in window title and URL
             if search_text:
+                escaped = _escape_like(search_text)
                 query = query.filter(
-                    (ActivityEvent.window_title.ilike(f'%{search_text}%')) |
-                    (ActivityEvent.url.ilike(f'%{search_text}%'))
+                    (ActivityEvent.window_title.ilike(f'%{escaped}%')) |
+                    (ActivityEvent.url.ilike(f'%{escaped}%'))
                 )
             
             total = query.count()
@@ -246,7 +253,7 @@ def register_extended_routes(app):
             
             # Search filter
             if search_cmd:
-                query = query.filter(CommandEvent.command.ilike(f'%{search_cmd}%'))
+                query = query.filter(CommandEvent.command.ilike(f'%{_escape_like(search_cmd)}%'))
             
             # Exit code filter
             if exit_code is not None:
@@ -311,12 +318,14 @@ def register_extended_routes(app):
             results = []
             since = datetime.utcnow() - timedelta(hours=hours)
             
+            escaped_query = _escape_like(query_text)
+
             # Search clipboard events
             if 'clipboard' in event_types:
                 clipboard_results = ClipboardEvent.query.filter(
-                    (ClipboardEvent.raw_content.ilike(f'%{query_text}%')) |
-                    (ClipboardEvent.processed_summary.ilike(f'%{query_text}%')) |
-                    (ClipboardEvent.tags.ilike(f'%{query_text}%')),
+                    (ClipboardEvent.raw_content.ilike(f'%{escaped_query}%')) |
+                    (ClipboardEvent.processed_summary.ilike(f'%{escaped_query}%')) |
+                    (ClipboardEvent.tags.ilike(f'%{escaped_query}%')),
                     ClipboardEvent.created_at >= since
                 ).limit(limit).all()
                 
@@ -334,9 +343,9 @@ def register_extended_routes(app):
             # Search activity events
             if 'activity' in event_types:
                 activity_results = ActivityEvent.query.filter(
-                    (ActivityEvent.window_title.ilike(f'%{query_text}%')) |
-                    (ActivityEvent.application.ilike(f'%{query_text}%')) |
-                    (ActivityEvent.url.ilike(f'%{query_text}%')),
+                    (ActivityEvent.window_title.ilike(f'%{escaped_query}%')) |
+                    (ActivityEvent.application.ilike(f'%{escaped_query}%')) |
+                    (ActivityEvent.url.ilike(f'%{escaped_query}%')),
                     ActivityEvent.created_at >= since
                 ).limit(limit).all()
                 
@@ -354,7 +363,7 @@ def register_extended_routes(app):
             # Search command events
             if 'commands' in event_types:
                 command_results = CommandEvent.query.filter(
-                    CommandEvent.command.ilike(f'%{query_text}%'),
+                    CommandEvent.command.ilike(f'%{escaped_query}%'),
                     CommandEvent.created_at >= since
                 ).limit(limit).all()
                 

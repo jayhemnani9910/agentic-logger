@@ -3,7 +3,7 @@ set -e
 
 # Start services
 echo "Starting services..."
-cd /home/jey/jh-core/agentic_logger
+cd /home/po/projects/personal/jodnews/agentic_logger
 
 # Make setup script executable
 chmod +x setup.sh

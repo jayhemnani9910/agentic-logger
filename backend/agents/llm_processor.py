@@ -27,9 +27,9 @@ class LLMProcessor:
         try:
             response = requests.get(f"{self.ollama_url}/api/tags", timeout=2)
             return response.status_code == 200
-        except:
+        except (requests.RequestException, OSError):
             return False
-    
+
     def _call_ollama(self, prompt: str, temperature: float = 0.7) -> Optional[str]:
         """Call Ollama API"""
         try:
@@ -69,7 +69,7 @@ Respond ONLY in JSON format:
         if result:
             try:
                 return json.loads(result)
-            except:
+            except (json.JSONDecodeError, ValueError):
                 return {
                     'category': 'text',
                     'description': result[:100],
@@ -132,7 +132,7 @@ Respond ONLY with a JSON array of tags:
         if result:
             try:
                 return json.loads(result)
-            except:
+            except (json.JSONDecodeError, ValueError):
                 return [tag.strip() for tag in result.split(',')[:5]]
         
         return None
@@ -176,9 +176,9 @@ class OllamaManager:
         try:
             response = requests.get("http://localhost:11434/api/tags", timeout=2)
             return response.status_code == 200
-        except:
+        except (requests.RequestException, OSError):
             return False
-    
+
     @staticmethod
     def start_ollama() -> bool:
         """Try to start Ollama service"""
@@ -198,9 +198,9 @@ class OllamaManager:
                         stderr=subprocess.DEVNULL
                     )
                     return True
-                except:
+                except (FileNotFoundError, OSError):
                     continue
-        except:
+        except Exception:
             pass
         
         return False
@@ -214,9 +214,9 @@ class OllamaManager:
                 timeout=300  # 5 minutes
             )
             return result.returncode == 0
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             return False
-    
+
     @staticmethod
     def list_models() -> list[str]:
         """List available models"""
@@ -225,9 +225,9 @@ class OllamaManager:
             if response.status_code == 200:
                 data = response.json()
                 return [m['name'] for m in data.get('models', [])]
-        except:
+        except (requests.RequestException, OSError):
             pass
-        
+
         return []
 
 

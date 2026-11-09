@@ -48,9 +48,9 @@ class ActivityWatcher:
                 
                 # Extract URL if browser
                 url = None
-                if any(browser in app_name.lower() for browser in 
+                if any(browser in app_name.lower() for browser in
                        ['firefox', 'chrome', 'chromium', 'safari', 'edge']):
-                    url = self._extract_browser_url()
+                    url = self._extract_browser_url(window_title)
                 
                 return {
                     'window_title': window_title,
@@ -58,33 +58,20 @@ class ActivityWatcher:
                     'url': url,
                     'timestamp': datetime.utcnow()
                 }
-        except:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
             pass
         
         return None
     
-    def _extract_browser_url(self) -> Optional[str]:
-        """Extract URL from active browser window using improved xdotool"""
+    def _extract_browser_url(self, window_title: str) -> Optional[str]:
+        """Extract URL from browser window title"""
         try:
-            # Method 1: xdotool + xprop for browser detection
-            active_window = subprocess.run(
-                ["xdotool", "getactivewindow", "getwindowname"],
-                capture_output=True, text=True, timeout=1
-            ).stdout.strip()
-            
-            # Check if browser and extract URL
-            browser_names = ["chrome", "firefox", "brave", "edge"]
-            for browser in browser_names:
-                if browser in active_window.lower():
-                    # Try to get URL from browser title
-                    if " - " in active_window:
-                        potential_url = active_window.split(" - ")[-1]
-                        if potential_url.startswith(("http://", "https://")):
-                            return potential_url
-                    break
-            
+            if " - " in window_title:
+                potential_url = window_title.split(" - ")[-1]
+                if potential_url.startswith(("http://", "https://")):
+                    return potential_url
             return None
-        except (subprocess.TimeoutExpired, Exception):
+        except Exception:
             return None
     
     def _check_activity(self):
